@@ -154,3 +154,89 @@ def calculate_component_score(component_df, component_name):
         "total_deduction": total_deduction,
         "details": result
     }
+
+
+def calculate_bcim(scores, standard_weights, actual_weights):
+    """
+    计算 BCIm（桥面综合评分）
+
+    参数：
+        scores:
+            各桥面要素评分，例如：
+            [46.70, 70.00, 85.00, 70.00, 85.00, 100.00]
+
+        standard_weights:
+            规范权重，例如：
+            [0.30, 0.10, 0.25, 0.10, 0.15, 0.10]
+
+        actual_weights:
+            实际参与权重，例如：
+            [0.30, 0.10, 0.25, 0.10, 0.00, 0.00]
+
+    返回：
+        BCIm
+    """
+
+    # 实际参与权重之和
+    total_actual_weight = sum(actual_weights)
+
+    if total_actual_weight <= 0:
+        return 100.0
+
+    # 计算 BCIm
+    bcim = 0.0
+
+    for score, standard_weight, actual_weight in zip(
+        scores,
+        standard_weights,
+        actual_weights
+    ):
+
+        # 不参与的桥面要素不计算
+        if actual_weight <= 0:
+            continue
+
+        # 重分配权重
+        redistributed_weight = (
+            standard_weight / total_actual_weight
+        )
+
+        bcim += score * redistributed_weight
+
+    return bcim
+
+
+def calculate_bsim(scores, actual_weights):
+    """
+    计算 BSIm
+
+    实际参与的桥面要素取最低评分。
+    未参与的桥面要素按 100 分处理。
+
+    参数：
+        scores:
+            各桥面要素评分
+
+        actual_weights:
+            各桥面要素实际参与权重
+
+    返回：
+        BSIm
+    """
+
+    if not scores:
+        return 100.0
+
+    adjusted_scores = []
+
+    for score, actual_weight in zip(
+        scores,
+        actual_weights
+    ):
+
+        if actual_weight > 0:
+            adjusted_scores.append(score)
+        else:
+            adjusted_scores.append(100.0)
+
+    return min(adjusted_scores)
