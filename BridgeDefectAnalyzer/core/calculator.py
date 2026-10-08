@@ -2,23 +2,47 @@ import pandas as pd
 from  core.defect_rules import DECK_COMPONENT_DEFECT_RULES
 
 
-def calculate_pavement_score(pavement_df):
+def calculate_component_score(component_df, component_name):
     """
-    计算桥面铺装评分
+    计算桥面要素评分
 
-    DPij：
+    参数：
+        component_df：
+            当前桥面要素的数据，类型为 pandas.DataFrame
+
+        component_name：
+            桥面要素名称，例如：
+            "桥面铺装"
+            "伸缩装置"
+            "栏杆、护栏"
+            "排水系统"
+
+    计算过程：
         每个“损坏类型”取其对应病害中的最大扣分分数。
 
-    μij = DPij / ΣDPij
-    ωij = 3μij³ - 5.5μij² + 3.5μij
-    DPi×ωij = DPij × ωij
-    最终评分 = 100 - Σ(DPi×ωij)
+        μij = DPij / ΣDPij
+        ωij = 3μij³ - 5.5μij² + 3.5μij
+        DPi×ωij = DPij × ωij
+
+        最终评分 = 100 - Σ(DPi×ωij)
     """
 
-    df = pavement_df.copy()
+    df = component_df.copy()
 
     # --------------------------------------------------------
-    # 1. 扣分分数转数字
+    # 1. 检查部件规则是否存在
+    # --------------------------------------------------------
+    if component_name not in DECK_COMPONENT_DEFECT_RULES:
+        raise ValueError(
+            f"没有找到部件 [{component_name}] 的病害规则"
+        )
+
+    component_rules = DECK_COMPONENT_DEFECT_RULES[
+        component_name
+    ]
+
+    # --------------------------------------------------------
+    # 2. 扣分分数转数字
     # --------------------------------------------------------
     df["扣分分数"] = pd.to_numeric(
         df["扣分分数"],
@@ -26,10 +50,12 @@ def calculate_pavement_score(pavement_df):
     ).fillna(0)
 
     # --------------------------------------------------------
-    # 2. 病害类型 → 损坏类型
+    # 3. 病害类型 → 损坏类型
     # --------------------------------------------------------
     def get_damage_category(defect_type):
-        for category, defect_types in DECK_COMPONENT_DEFECT_RULES["桥面铺装"].items():
+
+        for category, defect_types in component_rules.items():
+
             if defect_type in defect_types:
                 return category
 
@@ -40,7 +66,7 @@ def calculate_pavement_score(pavement_df):
     )
 
     # --------------------------------------------------------
-    # 3. 只保留已经归类且有扣分的病害
+    # 4. 只保留已经归类且有扣分的病害
     # --------------------------------------------------------
     df = df[
         df["损坏类型"].notna()
@@ -48,10 +74,10 @@ def calculate_pavement_score(pavement_df):
     ].copy()
 
     # --------------------------------------------------------
-    # 4. 建立完整的损坏类型
+    # 5. 建立完整的损坏类型
     # --------------------------------------------------------
     damage_types = list(
-        DECK_COMPONENT_DEFECT_RULES["桥面铺装"].keys()
+        component_rules.keys()
     )
 
     result = pd.DataFrame({
@@ -59,7 +85,7 @@ def calculate_pavement_score(pavement_df):
     })
 
     # --------------------------------------------------------
-    # 5. 每个损坏类型取最大的扣分分数
+    # 6. 每个损坏类型取最大的扣分分数
     # --------------------------------------------------------
     max_dp = (
         df.groupby("损坏类型")["扣分分数"]
@@ -73,20 +99,24 @@ def calculate_pavement_score(pavement_df):
         how="left"
     )
 
-    result["单项扣分DPij"] = result["单项扣分DPij"].fillna(0)
+    result["单项扣分DPij"] = (
+        result["单项扣分DPij"]
+        .fillna(0)
+    )
 
     # --------------------------------------------------------
-    # 6. 总 DP
+    # 7. 总 DP
     # --------------------------------------------------------
     total_dp = result["单项扣分DPij"].sum()
 
     # --------------------------------------------------------
-    # 7. 计算比重和权重
+    # 8. 计算比重和权重
     # --------------------------------------------------------
     if total_dp > 0:
 
         result["比重μij"] = (
-            result["单项扣分DPij"] / total_dp
+            result["单项扣分DPij"]
+            / total_dp
         )
 
         u = result["比重μij"]
@@ -103,21 +133,23 @@ def calculate_pavement_score(pavement_df):
         )
 
     else:
+
         result["比重μij"] = 0.0
         result["权重ωij"] = 0.0
         result["DPi×ωij"] = 0.0
 
     # --------------------------------------------------------
-    # 8. 总扣分
+    # 9. 总扣分
     # --------------------------------------------------------
     total_deduction = result["DPi×ωij"].sum()
 
     # --------------------------------------------------------
-    # 9. 最终评分
+    # 10. 最终评分
     # --------------------------------------------------------
     score = 100 - total_deduction
 
     return {
+        "component_name": component_name,
         "score": score,
         "total_deduction": total_deduction,
         "details": result
