@@ -156,87 +156,66 @@ def calculate_component_score(component_df, component_name):
     }
 
 
-def calculate_bcim(scores, standard_weights, actual_weights):
+def calculate_deck_max_dp(df):
     """
-    计算 BCIm（桥面综合评分）
+    提取桥面系各部件、各损坏类型的最大扣分。
 
-    参数：
-        scores:
-            各桥面要素评分，例如：
-            [46.70, 70.00, 85.00, 70.00, 85.00, 100.00]
+    当前支持：
+        桥面铺装
 
-        standard_weights:
-            规范权重，例如：
-            [0.30, 0.10, 0.25, 0.10, 0.15, 0.10]
-
-        actual_weights:
-            实际参与权重，例如：
-            [0.30, 0.10, 0.25, 0.10, 0.00, 0.00]
-
-    返回：
-        BCIm
+    后续增加其他部件规则后，无需修改计算逻辑。
     """
 
-    # 实际参与权重之和
-    total_actual_weight = sum(actual_weights)
+    df = df.copy()
 
-    if total_actual_weight <= 0:
-        return 100.0
+    # 1. 筛选桥面系数据
+    df = df[
+        df["部位类型"] == "桥面系"
+    ].copy()
 
-    # 计算 BCIm
-    bcim = 0.0
+    # 2. 扣分分数转换为数字
+    df["扣分分数"] = pd.to_numeric(
+        df["扣分分数"],
+        errors="coerce"
+    ).fillna(0)
 
-    for score, standard_weight, actual_weight in zip(
-        scores,
-        standard_weights,
-        actual_weights
+    results = []
+
+    # 3. 遍历桥面系下的每个部件
+    for component_name, component_rules in (
+        DECK_COMPONENT_DEFECT_RULES.items()
     ):
 
-        # 不参与的桥面要素不计算
-        if actual_weight <= 0:
-            continue
+        # 筛选当前部件
+        component_df = df[
+            df["部件类型"] == component_name
+        ].copy()
 
-        # 重分配权重
-        redistributed_weight = (
-            standard_weight / total_actual_weight
-        )
+        # 4. 遍历当前部件的每种损坏类型
+        for damage_category, defect_types in (
+            component_rules.items()
+        ):
 
-        bcim += score * redistributed_weight
+            # 找出属于当前损坏类型的原始病害
+            damage_df = component_df[
+                component_df["病害类型"].isin(defect_types)
+                & (component_df["扣分分数"] > 0)
+            ]
 
-    return bcim
+            # 5. 提取最大扣分；没有记录时记为0
+            max_dp = (
+                damage_df["扣分分数"].max()
+                if not damage_df.empty
+                else 0
+            )
 
+            results.append({
+                "部件类型": component_name,
+                "损坏类型": damage_category,
+                "单项扣分DPij": max_dp,
+            })
 
-def calculate_bsim(scores, actual_weights):
-    """
-    计算 BSIm
+    # 6. 转换为结果表
+    result = pd.DataFrame(results)
 
-    实际参与的桥面要素取最低评分。
-    未参与的桥面要素按 100 分处理。
-
-    参数：
-        scores:
-            各桥面要素评分
-
-        actual_weights:
-            各桥面要素实际参与权重
-
-    返回：
-        BSIm
-    """
-
-    if not scores:
-        return 100.0
-
-    adjusted_scores = []
-
-    for score, actual_weight in zip(
-        scores,
-        actual_weights
-    ):
-
-        if actual_weight > 0:
-            adjusted_scores.append(score)
-        else:
-            adjusted_scores.append(100.0)
-
-    return min(adjusted_scores)
+    return result
