@@ -12,67 +12,116 @@ DEFECT_MAP = {
     for sub_defect in sub_defects
 }
 
-def parse_raw_defect_excel(raw_excel_path):
+UPPER_DEFECT_MAP = {
+
+}
+
+LOWER_DEFECT_MAP = {
+
+}
+
+def parse_structure_defect(df_all, target_part, defect_map):
     """
-    读取现场原始病害 Excel 明细表，清洗非数值扣分并完成归类反推
+    通用结构部位病害解析与大类扣分计算器
+    :param df_all: 清洗后的总表 DataFrame
+    :param target_part: 构件部位（如 "桥面系", "上部结构", "下部结构"）
+    :param defect_map: 对应部位的反向映射字典
     """
-    print(f"1. 正在读取原始病害明细表: {raw_excel_path}")
-    df = read_excel(raw_excel_path,skip_hidden_rows=True)
+    print(f"  └─ 正在处理子模块: 【{target_part}】...")
     
-    # 清理列名两端可能存在的空格
-    df.columns = [str(c).strip() for c in df.columns]
-
-    # 根据控制台输出的真实列名设置
-    part_col = "部位类型"
-    component_col = "部件类型"
-    defect_col = "病害类型"
-    score_col = "扣分分数"
-
-    # ---------------- 关键修复：清洗扣分列数据类型 ----------------
-    # 将扣分列强制转为数值类型，遇到非数字（如空值、文本）自动转为 0
-    df[score_col] = pd.to_numeric(df[score_col], errors='coerce').fillna(0)
-
-    # 1.1 过滤：仅保留桥面系且扣分 > 0 的有效病害记录
-    qmx_df = df[(df[part_col] == "桥面系") & (df[score_col] > 0)].copy()
-    print(f"   └─ 成功筛选出桥面系有效扣分记录 {len(qmx_df)} 条。")
+    # 1. 过滤指定部位且扣分 > 0 的记录
+    part_df = df_all[(df_all["部位类型"] == target_part) & (df_all["扣分分数"] > 0)].copy()
+    print(f"     [ {target_part} ] 筛选出有效扣分记录 {len(part_df)} 条。")
 
     target_deductions = {}
 
-    # 1.2 遍历明细，完成映射并取同大类最大扣分
-    for _, row in qmx_df.iterrows():
-        component = str(row[component_col]).strip() if pd.notna(row[component_col]) else ""
-        raw_defect = str(row[defect_col]).strip() if pd.notna(row[defect_col]) else ""
-        score = int(row[score_col])
+    # 2. 遍历并映射取最大扣分
+    for _, row in part_df.iterrows():
+        component = str(row["部件类型"]).strip() if pd.notna(row["部件类型"]) else ""
+        raw_defect = str(row["病害类型"]).strip() if pd.notna(row["病害类型"]) else ""
+        score = int(row["扣分分数"])
 
-        # 从映射字典中查找规范大类名称
-        std_category = DEFECT_MAP.get((component, raw_defect))
+        std_category = defect_map.get((component, raw_defect))
 
         if std_category:
-            # 同一大类存在多项扣分时取最高分
             current_max = target_deductions.get(std_category, 0)
             target_deductions[std_category] = max(current_max, score)
-            print(f"  ├─ [精准映射] [{component}] '{raw_defect}' ({score}分) -> 规范大类 '{std_category}' (更新当前最高扣分: {target_deductions[std_category]}分)")
         else:
-            # 未精准匹配时保留原名称兜底
             target_deductions[raw_defect] = max(target_deductions.get(raw_defect, 0), score)
-            print(f"  ├─ ⚠️ [未精准匹配] [{component}] '{raw_defect}'，暂保留原名称")
 
-    print(f"\n2. 原始数据提取完毕！最终转换得到的扣分字典:\n   {target_deductions}")
     return target_deductions
 
+# if __name__ == "__main__":
+#     raw_defect_excel_path = r"G:\Python_lk\Python\BridgeDefectAnalyzer\input\病害列表导出2026-10-09.xlsx"
+#     rule_file_path = r"G:\Python_lk\Python\BridgeDefectAnalyzer\input\城市桥梁评分计算.xlsx"
+#     output_path = (
+#       r"G:\Python_lk\Python\BridgeDefectAnalyzer\output\桥面系各要素扣分汇总.xlsx"
+#     )
+#     #     print(f"1. 正在读取原始病害明细表: {raw_excel_path}")
+#     df = read_excel(raw_defect_excel_path,skip_hidden_rows=True)
+#     print(df)
+
+#     # 提取最高扣分字典
+#     deductions_data = parse_structure_defect(df,"桥面系",defect_map = DEFECT_MAP)
+#     print(deductions_data)
+    
+#     # 场景 A 初始化复位并反填
+#     Pingfen_path= process_new_inspection(template_path = rule_file_path, target_deductions=deductions_data)
+#     print(Pingfen_path)
+
+#     process_bridge_summary_to_new_file(Pingfen_path, output_path)
+
+import os
+import pandas as pd
 
 if __name__ == "__main__":
+    # 1. 核心路径配置
     raw_defect_excel_path = r"G:\Python_lk\Python\BridgeDefectAnalyzer\input\病害列表导出2026-10-09.xlsx"
     rule_file_path = r"G:\Python_lk\Python\BridgeDefectAnalyzer\input\城市桥梁评分计算.xlsx"
-    output_path = (
-      r"G:\Python_lk\Python\BridgeDefectAnalyzer\output\桥面系各要素扣分汇总.xlsx"
-    )
-    
-    # 提取最高扣分字典
-    deductions_data = parse_raw_defect_excel(raw_defect_excel_path)
-    
-    # 场景 A 初始化复位并反填
-    Pingfen_path= process_new_inspection(template_path = rule_file_path, target_deductions=deductions_data)
-    print(Pingfen_path)
+    output_dir = r"G:\Python_lk\Python\BridgeDefectAnalyzer\output"
 
-    process_bridge_summary_to_new_file(Pingfen_path, output_path)
+    # 确保输出目录存在
+    os.makedirs(output_dir, exist_ok=True)
+
+    print(f"1. 正在读取全量病害总表: {raw_defect_excel_path}")
+    df_all = read_excel(raw_defect_excel_path, skip_hidden_rows=True)
+    df_all.columns = [str(c).strip() for c in df_all.columns]
+
+    # 检查是否存在“桥梁名称”列
+    bridge_col = "桥梁名称"
+    if bridge_col not in df_all.columns:
+        raise KeyError(f"❌ 原始数据中未找到 '{bridge_col}' 列，无法进行按桥批量处理！当前列头为：{df_all.columns.tolist()}")
+
+    # 2. 按“桥梁名称”进行分组（groupby），实现多桥批量循环
+    grouped = df_all.groupby(bridge_col)
+    print(f"📊 检测到共有 {len(grouped)} 座桥梁需要处理。\n" + "="*50)
+
+    for bridge_name, df_bridge in grouped:
+        # 清理桥梁名称中的非法字符（防止名字带斜杠等导致路径报错）
+        safe_bridge_name = str(bridge_name).strip().replace("/", "_").replace("\\", "_")
+        print(f"\n🌉 正在处理桥梁: 【 {safe_bridge_name} 】 (包含病害记录: {len(df_bridge)} 条)")
+
+        try:
+            # 3. 针对当前桥梁提取最高扣分字典（这里以桥面系为例）
+            deductions_data = parse_structure_defect(df_bridge, "桥面系", defect_map=DEFECT_MAP)
+            
+            if not deductions_data:
+                print(f"  ⚠️ 桥梁 [{safe_bridge_name}] 没有筛选到有效的桥面系扣分记录，跳过生成。")
+                continue
+
+            # 4. 场景 A 初始化复位并反填（传入模板和当前桥的数据）
+            pingfen_path = process_new_inspection(template_path=rule_file_path, target_deductions=deductions_data)
+
+            # 5. 动态生成以桥名命名的输出文件路径
+            bridge_output_path = os.path.join(output_dir, f"{safe_bridge_name}_桥面系扣分汇总.xlsx")
+
+            # 6. 生成最终汇总文件
+            process_bridge_summary_to_new_file(pingfen_path, bridge_output_path)
+            print(f"  ✅ 桥梁 [{safe_bridge_name}] 处理成功！文件已保存至: {bridge_output_path}")
+
+        except Exception as e:
+            print(f"  ❌ 桥梁 [{safe_bridge_name}] 处理失败，错误信息: {e}")
+            continue
+
+    print("\n" + "="*50)
+    print("🎉 所有桥梁的批量自动化评估流水线已全部执行完毕！")
