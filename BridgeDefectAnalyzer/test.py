@@ -1,7 +1,8 @@
 import pandas as pd
 from core.defect_rules import DECK_COMPONENT_DEFECT_RULES
 from core.excel_handler import read_excel
-from rule_test import process_new_inspection
+from core.inspection_filler import process_new_inspection
+from core.eport_generator import process_bridge_summary_to_new_file
 
 # 构建 (部件名称, 现场病害) -> 规范大类 的反向查找字典
 DEFECT_MAP = {
@@ -61,11 +62,17 @@ def parse_raw_defect_excel(raw_excel_path):
 
 
 if __name__ == "__main__":
-    raw_defect_excel_path = r"E:\Python\BridgeDefectAnalyzer\input\virus.xlsx"
-    rule_file_path = r"E:\Python\BridgeDefectAnalyzer\input\城市桥梁评分计算.xlsx"
+    raw_defect_excel_path = r"G:\Python_lk\Python\BridgeDefectAnalyzer\input\病害列表导出2026-10-09.xlsx"
+    rule_file_path = r"G:\Python_lk\Python\BridgeDefectAnalyzer\input\城市桥梁评分计算.xlsx"
+    output_path = (
+      r"G:\Python_lk\Python\BridgeDefectAnalyzer\output\桥面系各要素扣分汇总.xlsx"
+    )
     
     # 提取最高扣分字典
     deductions_data = parse_raw_defect_excel(raw_defect_excel_path)
     
     # 场景 A 初始化复位并反填
-    process_new_inspection(template_path = rule_file_path, target_deductions=deductions_data)
+    Pingfen_path= process_new_inspection(template_path = rule_file_path, target_deductions=deductions_data)
+    print(Pingfen_path)
+
+    process_bridge_summary_to_new_file(Pingfen_path, output_path)
