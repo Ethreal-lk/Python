@@ -243,12 +243,12 @@ def process_bridge_summary_to_new_file(
   print(f"\n🎉 结果已成功写入到新的 Excel 文件中: {output_file_path}")
 
 
-if __name__ == "__main__":
-  input_path = (
-      r"G:\Python_lk\Python\BridgeDefectAnalyzer\input\城市桥梁评分计算.xlsx"
-  )
-  output_path = (
-      r"G:\Python_lk\Python\BridgeDefectAnalyzer\output\桥面系各要素扣分汇总.xlsx"
-  )
+# if __name__ == "__main__":
+#   input_path = (
+#       r"G:\Python_lk\Python\BridgeDefectAnalyzer\input\城市桥梁评分计算.xlsx"
+#   )
+#   output_path = (
+#       r"G:\Python_lk\Python\BridgeDefectAnalyzer\output\桥面系各要素扣分汇总.xlsx"
+#   )
 
-  process_bridge_summary_to_new_file(input_path, output_path)
+#   process_bridge_summary_to_new_file(input_path, output_path)
