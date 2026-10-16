@@ -1,147 +1,53 @@
+import pandas as pd
+from core.defect_rules import DECK_COMPONENT_DEFECT_RULES, UPPER_COMPONENT_DEFECT_RULES, LOWER_COMPONENT_DEFECT_RULES,LOWER_COMPONENT_ALIAS
 from core.excel_handler import read_excel
-from core.calculator import calculate_component_score
-from core.defect_rules import DECK_COMPONENT_TYPES
-import sys
+from core.inspection_filler import process_new_inspection
+from core.eport_generator import process_bridge_summary_to_new_file
+from LOwer_test import process_lower_sheet
+from QMXTEST2 import process_deck_sheet
+from openpyxl import Workbook,load_workbook
+import os
+import pandas as pd
 
-sys.stdout.reconfigure(encoding="utf-8")
-sys.stderr.reconfigure(encoding="utf-8")
-
-
-file_path = r"G:\Python_lk\Python\BridgeDefectAnalyzer\input\virus.xlsx"
-
-
-def analyze_deck(df, component_types):
-    """
-    分析所有桥梁的桥面系各部件评分
-
-    分组层级：
-        桥梁名称
-        ↓
-        部件类型
-        ↓
-        分幅
-        ↓
-        孔跨
-    """
-
-    for bridge_name, bridge_df in df.groupby("桥梁名称"):
-
-        print("\n" + "=" * 60)
-        print(f"桥梁：{bridge_name}")
-        print("=" * 60)
-
-        # ====================================================
-        # 1. 筛选桥面系
-        # ====================================================
-        deck_df = bridge_df[
-            bridge_df["部位类型"] == "桥面系"
-        ]
-
-        if deck_df.empty:
-            print("没有桥面系数据，跳过")
-            continue
-
-        # ====================================================
-        # 2. 遍历桥面系下面的每个部件
-        # ====================================================
-        for component_type in component_types:
-
-            component_df = deck_df[
-                deck_df["部件类型"] == component_type
-            ]
-
-            print("\n" + "-" * 50)
-            print(f"部件：{component_type}")
-            print(f"数据：{len(component_df)} 条")
-            print("-" * 50)
-
-            if component_df.empty:
-                print("没有该部件数据，跳过")
-                continue
-
-            # =================================================
-            # 3. 按 分幅 + 孔跨
-            # =================================================
-            for (fenfu, kongkua), span_df in component_df.groupby(
-                ["分幅", "孔跨"]
-            ):
-
-                print(
-                    f"\n分幅：{fenfu}    "
-                    f"孔跨：{kongkua}"
-                )
-
-                print(
-                    f"本孔跨数据：{len(span_df)} 条"
-                )
-
-                # =============================================
-                # 4. 调用统一评分函数
-                # =============================================
-                result = calculate_component_score(
-                    span_df,
-                    component_type
-                )
-
-                # =============================================
-                # 5. 输出结果
-                # =============================================
-                print(
-                    f"总扣分："
-                    f"{result['total_deduction']:.2f}"
-                )
-
-                print(
-                    f"评分："
-                    f"{result['score']:.2f}"
-                )
-
-                # =============================================
-                # 6. 输出详细计算过程
-                # =============================================
-                if not result["details"].empty:
-
-                    print("\n损坏类型计算明细：")
-
-                    print(
-                        result["details"][
-                            [
-                                "损坏类型",
-                                "单项扣分DPij",
-                                "比重μij",
-                                "权重ωij",
-                                "DPi×ωij"
-                            ]
-                        ].to_string(index=False)
-                    )
 
 
 if __name__ == "__main__":
+    raw_defect_excel_path = r"E:\Python\BridgeDefectAnalyzer\input\病害列表导出2026-10-09_modify.xlsx"
+    rule_file_path = r"E:\Python\BridgeDefectAnalyzer\input\城市桥梁评分计算.xlsx"
+    output_dir = r"E:\Python\BridgeDefectAnalyzer\output"
 
-    df = read_excel(
-        file_path,
-        skip_hidden_rows=True
-    )
+    os.makedirs(output_dir, exist_ok=True)
 
-    print(
-        f"Excel读取完成，共 {len(df)} 条数据"
-    )
+    print(f"1. 正在读取全量病害总表: {raw_defect_excel_path}")
+    df_all = read_excel(raw_defect_excel_path, skip_hidden_rows=True, skip_hidden_cols=True)
+    df_all.columns = [str(c).strip() for c in df_all.columns]
 
-    analyze_deck(
-        df,
-        DECK_COMPONENT_TYPES
-    )
+    bridge_col = "桥梁名称"
+    if bridge_col not in df_all.columns:
+        raise KeyError(f"❌ 原始数据中未找到 '{bridge_col}' 列，当前列头为：{df_all.columns.tolist()}")
 
-if __name__ == "__main__":
+    grouped = df_all.groupby(bridge_col)
+    print(f"📊 检测到共有 {len(grouped)} 座桥梁需要处理。\n" + "=" * 50)
 
-    df = read_excel(
-        file_path,
-        skip_hidden_rows=True
-    )
+    for bridge_name, df_bridge in grouped:
+        safe_bridge_name = str(bridge_name).strip().replace("/", "_").replace("\\", "_")
+        print(f"\n🌉 正在处理桥梁: 【 {safe_bridge_name} 】 (病害记录: {len(df_bridge)} 条)")
 
-    print(f"Excel读取完成，共 {len(df)} 条数据")
+        wb = Workbook()
 
-    analyze_deck(
-        df,
-        DECK_COMPONENT_TYPES
-    )
+        # Sheet 1: 桥面系
+        process_deck_sheet(wb, df_bridge, rule_file_path, safe_bridge_name)
+
+        # # Sheet 2: 上部结构（占位）
+        # ws_upper = wb.create_sheet("上部结构")
+        # ws_upper.cell(row=1, column=1, value="上部结构评分表（待生成）")
+
+        # Sheet 3: 下部结构
+        process_lower_sheet(wb, df_bridge, rule_file_path, safe_bridge_name)
+
+        out_path = os.path.join(output_dir, f"{safe_bridge_name}_评分表.xlsx")
+        wb.save(out_path)
+        print(f"  📁 已保存: {out_path}")
+
+    print("\n" + "=" * 50)
+    print("🎉 所有桥梁处理完毕！")

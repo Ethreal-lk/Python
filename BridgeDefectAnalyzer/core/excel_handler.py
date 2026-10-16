@@ -7,41 +7,74 @@ import pandas as pd
 from openpyxl import load_workbook
 
 
-def read_excel(file_path, sheet_name=0, skip_hidden_rows=False):
-    """读取指定 Sheet"""
+def read_excel(file_path, sheet_name=0, skip_hidden_rows=False, skip_hidden_cols=False):
+    """读取指定 Sheet，可跳过隐藏行/列"""
 
     if not os.path.exists(file_path):
         raise FileNotFoundError(
             "Excel 文件不存在: {}".format(file_path)
         )
 
-    # 不需要跳过隐藏行，直接使用 pandas
-    if not skip_hidden_rows:
-        return pd.read_excel(
-            file_path,
-            sheet_name=sheet_name
-        )
+    # 不需要跳过隐藏行、列，直接使用 pandas
+    if not skip_hidden_rows and not skip_hidden_cols:
+        return pd.read_excel(file_path, sheet_name=sheet_name)
 
-    # 需要跳过隐藏行
     wb = load_workbook(file_path, data_only=True)
 
-    ws = (
-        wb.worksheets[sheet_name]
-        if isinstance(sheet_name, int)
-        else wb[sheet_name]
-    )
+    try:
+        ws = (
+            wb.worksheets[sheet_name]
+            if isinstance(sheet_name, int)
+            else wb[sheet_name]
+        )
 
-    # 第一行作为表头
-    headers = [cell.value for cell in ws[1]]
+        # 默认保留所有列
+        hidden_cols = set()
 
-    # 读取可见数据行
-    data = [
-        [cell.value for cell in row]
-        for row in ws.iter_rows(min_row=2)
-        if not ws.row_dimensions[row[0].row].hidden
-    ]
+        # 只在需要跳过隐藏列时，查找隐藏列
+        if skip_hidden_cols:
+            for col_letter, col_dim in ws.column_dimensions.items():
+                if col_dim.hidden:
+                    start = col_dim.min or column_index_from_string(col_letter)
+                    end = col_dim.max or start
+                    hidden_cols.update(range(start, end + 1))
 
-    return pd.DataFrame(data, columns=headers)
+        # 根据隐藏列索引，筛选需要保留的列
+        visible_cols = [
+            col_idx
+            for col_idx in range(1, ws.max_column + 1)
+            if col_idx not in hidden_cols
+        ]
+
+        # 读取表头
+        headers = [
+            ws.cell(row=1, column=col_idx).value
+            for col_idx in visible_cols
+        ]
+
+        # 读取数据
+        data = []
+
+        for row_idx in range(2, ws.max_row + 1):
+
+            # 按需跳过隐藏行
+            if (
+                skip_hidden_rows
+                and ws.row_dimensions[row_idx].hidden
+            ):
+                continue
+
+            row_data = [
+                ws.cell(row=row_idx, column=col_idx).value
+                for col_idx in visible_cols
+            ]
+
+            data.append(row_data)
+
+        return pd.DataFrame(data, columns=headers)
+
+    finally:
+        wb.close()
 
 def get_sheet_names(file_path):
     """获取 Sheet 名称"""
