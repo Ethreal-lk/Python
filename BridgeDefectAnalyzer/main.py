@@ -5,6 +5,7 @@ from core.inspection_filler import process_new_inspection
 from core.eport_generator import process_bridge_summary_to_new_file
 from LOwer_test import process_lower_sheet
 from QMXTEST2 import process_deck_sheet
+from Upper_test import process_upper_sheet
 from openpyxl import Workbook,load_workbook
 import os
 import pandas as pd
@@ -12,7 +13,7 @@ import pandas as pd
 
 
 if __name__ == "__main__":
-    raw_defect_excel_path = r"E:\Python\BridgeDefectAnalyzer\input\病害列表导出2026-10-09_modify.xlsx"
+    raw_defect_excel_path = r"E:\Python\BridgeDefectAnalyzer\input\病害列表导出2026-10-09_modify1024.xlsx"
     rule_file_path = r"E:\Python\BridgeDefectAnalyzer\input\城市桥梁评分计算.xlsx"
     output_dir = r"E:\Python\BridgeDefectAnalyzer\output"
 
@@ -38,12 +39,11 @@ if __name__ == "__main__":
         # Sheet 1: 桥面系
         process_deck_sheet(wb, df_bridge, rule_file_path, safe_bridge_name)
 
-        # # Sheet 2: 上部结构（占位）
-        # ws_upper = wb.create_sheet("上部结构")
-        # ws_upper.cell(row=1, column=1, value="上部结构评分表（待生成）")
-
         # Sheet 3: 下部结构
         process_lower_sheet(wb, df_bridge, rule_file_path, safe_bridge_name)
+
+        # Sheet 2: 上部结构
+        process_upper_sheet(wb, df_bridge, rule_file_path, safe_bridge_name)
 
         out_path = os.path.join(output_dir, f"{safe_bridge_name}_评分表.xlsx")
         wb.save(out_path)
